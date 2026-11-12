@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Free AI Paper & Grammar Checker</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.4.2/mammoth.browser.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 30px auto; padding: 0 20px; line-height: 1.6; }
+    h1 { color: #2c3e50; }
+    textarea { width: 100%; height: 200px; font-size: 16px; padding: 10px; margin-top: 10px; }
+    button { background: #3498db; color: white; border: none; padding: 12px 20px; cursor: pointer; font-size: 16px; border-radius: 4px; }
+    button:hover { background: #2980b9; }
+    .issue { background: #fff3cd; border-left: 4px solid #ffc107; margin: 10px 0; padding: 10px; border-radius: 4px; }
+    .issue-title { font-weight: bold; color: #856404; }
+    .suggestion { color: #155724; background: #d4edda; padding: 2px 6px; border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+  <h1>Paper Grammar & Spell Checker</h1>
+  <p>Upload a document (.docx or .txt) or paste your paper below:</p>
+  
+  <input type="file" id="fileInput" accept=".txt,.docx" />
+  <br><br>
+  
+  <textarea id="paperText" placeholder="Paste or upload your paper text here..."></textarea>
+  <br><br>
+  
+  <button onclick="checkPaper()">Analyze Paper</button>
+
+  <h2 margin-top: 30px;>Results & Suggestions</h2>
+  <div id="results">No analysis run yet.</div>
+
+  <script>
+    // Handle File Upload (.docx and .txt)
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      if (file.name.endsWith('.docx')) {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          mammoth.extractRawText({ arrayBuffer: event.target.result })
+            .then(result => { document.getElementById('paperText').value = result.value; });
+        };
+        reader.readAsArrayBuffer(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+          document.getElementById('paperText').value = event.target.result;
+        };
+        reader.readAsText(file);
+      }
+    });
+
+    // Check Grammar using LanguageTool Public API
+    async function checkPaper() {
+      const text = document.getElementById('paperText').value;
+      const resultsDiv = document.getElementById('results');
+      
+      if (!text.trim()) {
+        resultsDiv.innerHTML = "<p style='color:red;'>Please insert text or upload a paper.</p>";
+        return;
+      }
+
+      resultsDiv.innerHTML = "<p>Checking paper for grammar and spelling issues...</p>";
+
+      try {
+        const response = await fetch('https://api.languagetool.org/v2/check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            'text': text,
+            'language': 'en-US'
+          })
+        });
+
+        const data = await response.json();
+        
+        if (data.matches.length === 0) {
+          resultsDiv.innerHTML = "<p style='color:green;'>No grammar or spelling issues detected!</p>";
+          return;
+        }
+
+        let outputHTML = `<p>Found <strong>${data.matches.length}</strong> issues:</p>`;
+        
+        data.matches.forEach((match, index) => {
+          const suggestions = match.replacements.slice(0, 3).map(r => `<span class="suggestion">${r.value}</span>`).join(', ');
+          const contextText = match.context.text;
+          
+          outputHTML += `
+            <div class="issue">
+              <div class="issue-title">#${index + 1}: ${match.message}</div>
+              <p><strong>Context:</strong> "...${contextText}..."</p>
+              ${suggestions ? `<p><strong>Suggested Replacement:</strong> ${suggestions}</p>` : ''}
+            </div>
+          `;
+        });
+
+        resultsDiv.innerHTML = outputHTML;
+      } catch (err) {
+        resultsDiv.innerHTML = `<p style="color:red;">Error connecting to grammar API: ${err.message}</p>`;
+      }
+    }
+  </script>
+</body>
+</html>
